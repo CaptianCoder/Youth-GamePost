@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory
 import json
 import os
 from werkzeug.utils import secure_filename
@@ -16,6 +16,16 @@ DATA_FILE = 'data/games.json'
 # Ensure directories exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs('data', exist_ok=True)
+
+# Create default image if it doesn't exist
+default_image_path = os.path.join(UPLOAD_FOLDER, 'default.jpg')
+if not os.path.exists(default_image_path):
+    # We'll create a simple colored image as default
+    from PIL import Image, ImageDraw
+    img = Image.new('RGB', (400, 300), color='#4e73df')
+    d = ImageDraw.Draw(img)
+    d.text((100, 140), "No Image Available", fill='white')
+    img.save(default_image_path)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -96,6 +106,11 @@ def create_game():
         return redirect(url_for('games'))
     
     return render_template('create_game.html')
+
+# Route to serve uploaded files
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
