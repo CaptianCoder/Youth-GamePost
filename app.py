@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash
 import json
 import os
 from werkzeug.utils import secure_filename
@@ -17,29 +17,30 @@ DATA_FILE = 'data/games.json'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs('data', exist_ok=True)
 
-# Create default image if it doesn't exist
-default_image_path = os.path.join(UPLOAD_FOLDER, 'default.jpg')
-if not os.path.exists(default_image_path):
-    # We'll create a simple colored image as default
-    from PIL import Image, ImageDraw
-    img = Image.new('RGB', (400, 300), color='#4e73df')
-    d = ImageDraw.Draw(img)
-    d.text((100, 140), "No Image Available", fill='white')
-    img.save(default_image_path)
-
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def load_games():
     try:
         with open(DATA_FILE, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+            games = json.load(f)
+            print(f"DEBUG: Loaded {len(games)} games from file")
+            for game in games:
+                print(f"DEBUG: Game - {game['title']}")
+            return games
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"DEBUG: Error loading games: {e}")
         return []
 
 def save_games(games):
-    with open(DATA_FILE, 'w') as f:
-        json.dump(games, f, indent=2)
+    try:
+        with open(DATA_FILE, 'w') as f:
+            json.dump(games, f, indent=2)
+        print(f"DEBUG: Saved {len(games)} games to file")
+        return True
+    except Exception as e:
+        print(f"DEBUG: Error saving games: {e}")
+        return False
 
 @app.route('/')
 def index():
@@ -48,6 +49,7 @@ def index():
 @app.route('/games')
 def games():
     games_list = load_games()
+    print(f"DEBUG: Passing {len(games_list)} games to template")
     return render_template('games.html', games=games_list)
 
 @app.route('/games/<game_id>')
@@ -63,7 +65,9 @@ def game_detail(game_id):
 @app.route('/create-game', methods=['GET', 'POST'])
 def create_game():
     if request.method == 'POST':
-        # Handle form submission
+        print("DEBUG: Form submitted")
+        
+        # Get form data
         title = request.form.get('title')
         age_range = request.form.get('age_range')
         setup_difficulty = request.form.get('setup_difficulty')
@@ -73,6 +77,8 @@ def create_game():
         description = request.form.get('description')
         resources = request.form.get('resources')
         
+        print(f"DEBUG: Form data - Title: {title}, Age: {age_range}")
+        
         # Handle file upload
         image_filename = 'default.jpg'
         if 'image' in request.files:
@@ -80,8 +86,10 @@ def create_game():
             if file and file.filename != '' and allowed_file(file.filename):
                 filename = secure_filename(file.filename)
                 unique_filename = f"{uuid.uuid4().hex}_{filename}"
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+                file.save(file_path)
                 image_filename = unique_filename
+                print(f"DEBUG: Saved image as {image_filename}")
         
         # Create new game object
         new_game = {
@@ -97,12 +105,16 @@ def create_game():
             'resources': resources
         }
         
+        print(f"DEBUG: New game created: {new_game['title']}")
+        
         # Save to JSON file
         games_list = load_games()
         games_list.append(new_game)
-        save_games(games_list)
+        if save_games(games_list):
+            flash('Game created successfully!')
+        else:
+            flash('Error saving game!')
         
-        flash('Game created successfully!')
         return redirect(url_for('games'))
     
     return render_template('create_game.html')
@@ -110,7 +122,7 @@ def create_game():
 # Route to serve uploaded files
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    return redirect(url_for('static', filename=f'uploads/{filename}'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
